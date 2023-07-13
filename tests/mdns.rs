@@ -2,10 +2,12 @@ use std::time::Duration;
 
 use futures_util::StreamExt;
 
+use serde::{Deserialize, Serialize};
 use wot_discovery::Discoverer;
 use wot_serve::servient::*;
 
 use tokio::task;
+use wot_td::extend::ExtendableThing;
 
 async fn run_servient() {
     let servient = Servient::builder("TestThing")
@@ -22,6 +24,21 @@ async fn run_servient() {
     .await;
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct A {}
+
+impl ExtendableThing for A {
+    type InteractionAffordance = ();
+    type PropertyAffordance = ();
+    type ActionAffordance = ();
+    type EventAffordance = ();
+    type Form = ();
+    type ExpectedResponse = ();
+    type DataSchema = ();
+    type ObjectSchema = ();
+    type ArraySchema = ();
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn discoverer() -> Result<(), Box<dyn std::error::Error>> {
     let local = task::LocalSet::new();
@@ -34,6 +51,18 @@ async fn discoverer() -> Result<(), Box<dyn std::error::Error>> {
 
             task::spawn_local(async {
                 let d = Discoverer::new().unwrap();
+
+                let t = std::pin::pin!(d.stream().unwrap())
+                    .next()
+                    .await
+                    .unwrap()
+                    .unwrap();
+
+                assert_eq!("TestThing", t.title);
+            });
+
+            task::spawn_local(async {
+                let d = Discoverer::new().unwrap().ext::<A>();
 
                 let t = std::pin::pin!(d.stream().unwrap())
                     .next()
