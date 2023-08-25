@@ -2,7 +2,8 @@ use std::future::ready;
 
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use tracing::{info, warn};
+use tracing::{info, trace, warn};
+use tracing_subscriber::EnvFilter;
 use wot_discovery::Discoverer;
 use wot_td::extend::ExtendableThing;
 
@@ -23,14 +24,21 @@ impl ExtendableThing for A {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt().init();
+    let filter = EnvFilter::try_from_default_env()
+        .or_else(|_| EnvFilter::try_new("info"))
+        .unwrap();
+
+    tracing_subscriber::fmt().with_env_filter(filter).init();
 
     let d = Discoverer::new()?.ext::<A>();
 
     d.stream()?
         .for_each(|thing| {
             match thing {
-                Ok(t) => info!("found {:?} {:?}", t.title, t.id),
+                Ok(t) => {
+                    info!("found {:?} {:?}", t.title, t.id,);
+                    trace!("{}", serde_json::to_string_pretty(&t).unwrap());
+                }
                 Err(e) => warn!("something went wrong {:?}", e),
             }
             ready(())

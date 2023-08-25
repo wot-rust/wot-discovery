@@ -102,6 +102,7 @@ impl<Other: ExtendableThing + ExtendablePiece> Discoverer<Other> {
         let receiver = self.mdns.browse(&self.service_type)?;
 
         let s = receiver.into_stream().filter_map(|v| async move {
+            tracing::info!("{:?}", v);
             if let ServiceEvent::ServiceResolved(info) = v {
                 let t = get_thing(info).await;
                 Some(t)
