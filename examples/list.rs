@@ -4,7 +4,7 @@ use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use tracing::{info, trace, warn};
 use tracing_subscriber::EnvFilter;
-use wot_discovery::Discoverer;
+use wot_discovery::{Discovered, Discoverer};
 use wot_td::extend::ExtendableThing;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,9 +33,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let d = Discoverer::new()?.ext::<A>();
 
     d.stream()?
-        .for_each(|thing| {
-            match thing {
-                Ok(t) => {
+        .for_each(|discovered| {
+            match discovered {
+                Ok(Discovered { thing: t, .. }) => {
                     info!("found {:?} {:?}", t.title, t.id,);
                     trace!("{}", serde_json::to_string_pretty(&t).unwrap());
                 }
