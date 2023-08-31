@@ -6,7 +6,7 @@
 //!
 //! - [x] [mDNS-SD (HTTP)](https://www.w3.org/TR/wot-discovery/#introduction-dns-sd-sec)
 
-use std::marker::PhantomData;
+use std::{marker::PhantomData, net::IpAddr};
 
 use futures_core::Stream;
 use futures_util::StreamExt;
@@ -43,25 +43,73 @@ pub struct Discoverer<Other: ExtendableThing + ExtendablePiece = Nil> {
     _other: PhantomData<Other>,
 }
 
+/// Discovered Thing and its mDNS information
+pub struct Discovered<Other: ExtendableThing + ExtendablePiece> {
+    /// Discovered Thing
+    ///
+    /// It is provided as presented by the discovered Servient.
+    pub thing: Thing<Other>,
+    info: ServiceInfo,
+    scheme: String,
+}
+
+impl<Other: ExtendableThing + ExtendablePiece> Discovered<Other> {
+    /// Discovered Servient listening addresses
+    pub fn get_addresses(&self) -> Vec<IpAddr> {
+        self.info
+            .get_addresses()
+            .iter()
+            .map(|ip| ip.to_owned().into())
+            .collect()
+    }
+    /// Discovered Servient listening port
+    pub fn get_port(&self) -> u16 {
+        self.info.get_port()
+    }
+
+    /// Discovered Servient hostname
+    ///
+    /// To be used to make tls requests
+    pub fn get_hostname(&self) -> &str {
+        self.info.get_hostname()
+    }
+
+    /// Discovered Servient scheme
+    pub fn get_scheme(&self) -> &str {
+        &self.scheme
+    }
+}
+
 async fn get_thing<Other: ExtendableThing + ExtendablePiece>(
     info: ServiceInfo,
-) -> Result<Thing<Other>> {
+) -> Result<Discovered<Other>> {
     let host = info.get_addresses().iter().next().ok_or(Error::NoAddress)?;
     let port = info.get_port();
     let props = info.get_properties();
     let path = props.get_property_val_str("td").unwrap_or(WELL_KNOWN);
-    let proto = match props.get_property_val_str("tls") {
-        Some(x) if x == "1" => "https",
-        _ => "http",
-    };
+    let proto = props
+        .get_property_val_str("scheme")
+        .or_else(|| {
+            // compatibility with
+            props
+                .get_property_val_str("tls")
+                .map(|tls| if tls == "1" { "https" } else { "http" })
+        })
+        .unwrap_or("http");
 
     debug!("Got {proto} {host} {port} {path}");
 
     let r = reqwest::get(format!("{proto}://{host}:{port}{path}")).await?;
 
-    let t = r.json().await?;
+    let thing = r.json().await?;
+    let scheme = proto.to_owned();
+    let d = Discovered {
+        thing,
+        info,
+        scheme,
+    };
 
-    Ok(t)
+    Ok(d)
 }
 
 impl Discoverer {
@@ -98,7 +146,7 @@ impl<Other: ExtendableThing + ExtendablePiece> Discoverer<Other> {
     }
 
     /// Returns an Stream of discovered things
-    pub fn stream(&self) -> Result<impl Stream<Item = Result<Thing<Other>>>> {
+    pub fn stream(&self) -> Result<impl Stream<Item = Result<Discovered<Other>>>> {
         let receiver = self.mdns.browse(&self.service_type)?;
 
         let s = receiver.into_stream().filter_map(|v| async move {

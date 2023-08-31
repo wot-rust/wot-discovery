@@ -57,10 +57,17 @@ async fn discoverer() -> Result<(), Box<dyn std::error::Error>> {
             task::spawn_local(async {
                 let d = Discoverer::new().unwrap();
 
-                let t = std::pin::pin!(d.stream().unwrap()).next().await.unwrap()?;
+                let discovered = std::pin::pin!(d.stream().unwrap()).next().await.unwrap()?;
+                let hostname = discovered.get_hostname();
+                let addresses = discovered.get_addresses();
+                let port = discovered.get_port();
+                let t = &discovered.thing;
 
                 assert_eq!("TestThing", t.title);
-                println!("Found {}", t.title);
+                println!(
+                    "Found {} at {} ({:?} : {})",
+                    t.title, hostname, addresses, port
+                );
                 Result::<(), Box<dyn std::error::Error>>::Ok(())
             })
             .await??;
@@ -68,7 +75,8 @@ async fn discoverer() -> Result<(), Box<dyn std::error::Error>> {
             task::spawn_local(async {
                 let d = Discoverer::new().unwrap().ext::<A>();
 
-                let t = std::pin::pin!(d.stream().unwrap()).next().await.unwrap()?;
+                let discovered = std::pin::pin!(d.stream().unwrap()).next().await.unwrap()?;
+                let t = &discovered.thing;
 
                 assert_eq!("TestThing", t.title);
                 println!("Found {}", t.title);
