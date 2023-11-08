@@ -19,6 +19,6 @@ tracing = "0.1.35"
 
 [dev-dependencies]
 serde = { version = "1.0.171", features = ["derive"] }
-tokio = { version = "1.19.2", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.33.0", features = ["macros", "rt-multi-thread"] }
 tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
 wot-serve = "0.3.1"
