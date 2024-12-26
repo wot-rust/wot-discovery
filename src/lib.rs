@@ -11,6 +11,7 @@ use std::{marker::PhantomData, net::IpAddr};
 use futures_core::Stream;
 use futures_util::StreamExt;
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
+use reqwest::Client;
 use tracing::debug;
 
 use wot_td::{
@@ -41,6 +42,7 @@ pub struct Discoverer<Other: ExtendableThing + ExtendablePiece = Nil> {
     mdns: ServiceDaemon,
     service_type: String,
     _other: PhantomData<Other>,
+    http_client: reqwest::Client,
 }
 
 /// Discovered Thing and its mDNS information
@@ -80,7 +82,23 @@ impl<Other: ExtendableThing + ExtendablePiece> Discovered<Other> {
     }
 }
 
+impl Discoverer {
+    /// Creates a new Discoverer
+    pub fn new() -> Result<Self> {
+        let mdns = ServiceDaemon::new()?;
+        let service_type = "_wot._tcp.local.".to_owned();
+        let http_client = Client::builder().build()?;
+        Ok(Self {
+            mdns,
+            service_type,
+            http_client,
+            _other: PhantomData,
+        })
+    }
+}
+
 async fn get_thing<Other: ExtendableThing + ExtendablePiece>(
+    client: &Client,
     info: ServiceInfo,
 ) -> Result<Discovered<Other>> {
     let host = info.get_addresses().iter().next().ok_or(Error::NoAddress)?;
@@ -99,7 +117,10 @@ async fn get_thing<Other: ExtendableThing + ExtendablePiece>(
 
     debug!("Got {proto} {host} {port} {path}");
 
-    let r = reqwest::get(format!("{proto}://{host}:{port}{path}")).await?;
+    let r = client
+        .get(format!("{proto}://{host}:{port}{path}"))
+        .send()
+        .await?;
 
     let thing = r.json().await?;
     let scheme = proto.to_owned();
@@ -112,19 +133,6 @@ async fn get_thing<Other: ExtendableThing + ExtendablePiece>(
     Ok(d)
 }
 
-impl Discoverer {
-    /// Creates a new Discoverer
-    pub fn new() -> Result<Self> {
-        let mdns = ServiceDaemon::new()?;
-        let service_type = "_wot._tcp.local.".to_owned();
-        Ok(Self {
-            mdns,
-            service_type,
-            _other: PhantomData,
-        })
-    }
-}
-
 impl<Other: ExtendableThing + ExtendablePiece> Discoverer<Other> {
     /// Extend the [Discoverer] with a [ExtendableThing]
     pub fn ext<T>(self) -> Discoverer<Other::Target>
@@ -135,12 +143,14 @@ impl<Other: ExtendableThing + ExtendablePiece> Discoverer<Other> {
         let Discoverer {
             mdns,
             service_type,
+            http_client,
             _other,
         } = self;
 
         Discoverer {
             mdns,
             service_type,
+            http_client,
             _other: PhantomData,
         }
     }
@@ -149,13 +159,18 @@ impl<Other: ExtendableThing + ExtendablePiece> Discoverer<Other> {
     pub fn stream(&self) -> Result<impl Stream<Item = Result<Discovered<Other>>>> {
         let receiver = self.mdns.browse(&self.service_type)?;
 
-        let s = receiver.into_stream().filter_map(|v| async move {
-            tracing::info!("{:?}", v);
-            if let ServiceEvent::ServiceResolved(info) = v {
-                let t = get_thing(info).await;
-                Some(t)
-            } else {
-                None
+        let http_client = self.http_client.clone();
+
+        let s = receiver.into_stream().filter_map(move |v| {
+            let client = http_client.clone();
+            async move {
+                tracing::info!("{:?}", v);
+                if let ServiceEvent::ServiceResolved(info) = v {
+                    let t = get_thing(&client, info).await;
+                    Some(t)
+                } else {
+                    None
+                }
             }
         });
 
