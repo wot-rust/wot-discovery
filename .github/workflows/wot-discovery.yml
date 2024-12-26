@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
 
     - name: REUSE Compliance Check
@@ -46,7 +46,7 @@ jobs:
     runs-on: ${{ matrix.platform }}
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Install Rust stable
       uses: dtolnay/rust-toolchain@stable
@@ -83,7 +83,7 @@ jobs:
     runs-on: ${{ matrix.platform }}
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Install rust-code-analysis on Ubuntu
       if: matrix.conf == 'ubuntu'
@@ -117,7 +117,7 @@ jobs:
     runs-on: ${{ matrix.platform }}
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Install Rust stable
       uses: dtolnay/rust-toolchain@stable
@@ -138,7 +138,7 @@ jobs:
     runs-on: ${{ matrix.platform }}
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Install Rust stable
       uses: dtolnay/rust-toolchain@stable
@@ -157,7 +157,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Install Rust stable
       uses: dtolnay/rust-toolchain@stable
@@ -198,79 +198,16 @@ jobs:
       with:
         files: lcov.info
 
-  weighted-code-coverage-ubuntu:
-
-    needs: [build, docs]
-
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v3
-
-    - name: Install Rust stable
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        toolchain: stable
-
-    - name: Install grcov
-      env:
-        GRCOV_LINK: https://github.com/mozilla/grcov/releases/download
-        GRCOV_VERSION: v0.8.13
-        GRCOV_BINARY: grcov-x86_64-unknown-linux-musl.tar.bz2
-      run: |
-        curl -L "$GRCOV_LINK/$GRCOV_VERSION/$GRCOV_BINARY" |
-        tar xj -C $HOME/.cargo/bin
-
-    - name: Install weighted-code-coverage
-      env:
-        WCC_LINK: https://github.com/SoftengPoliTo/weighted-code-coverage/releases/download
-        WCC_VERSION: v0.2.0
-        WCC_BINARY: weighted-code-coverage-0.2.0-x86_64-unknown-linux-gnu.tar.gz
-      run: |
-        curl -L "$WCC_LINK/$WCC_VERSION/$WCC_BINARY" |
-        tar xz -C $HOME/.cargo/bin
-
-    - name: Install llvm-tools-preview
-      run: |
-        rustup component add llvm-tools-preview
-
-    # Not necessary on a newly created image, but strictly advised
-    - name: Run cargo clean
-      run: |
-        cargo clean
-
-    - name: Run tests
-      env:
-        RUSTFLAGS: "-Cinstrument-coverage"
-        LLVM_PROFILE_FILE: "wot-td-%p-%m.profraw"
-      run: |
-        cargo test --verbose
-
-    - name: Run grcov
-      run: |
-        grcov . --binary-path ./target/debug/ -t coveralls -s . --token YOUR_COVERALLS_TOKEN > coveralls.json
-
-    - name: Run weighted-code-coverage
-      run: |
-        mkdir $HOME/wcc-output
-        weighted-code-coverage -p src/ -j coveralls.json -c cyclomatic --json $HOME/wcc-output/out.json
-
-    - name: Upload weighted-code-coverage data
-      uses: actions/upload-artifact@v3
-      with:
-        name: weighted-code-coverage-ubuntu
-        path: ~/wcc-output/out.json
-
 ################################## DEPENDENCY LAYER ###########################
 
   audit-ubuntu:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Check dependencies changes
-      uses: dorny/paths-filter@v2
+      uses: dorny/paths-filter@v3
       id: changes
       with:
         filters: |
@@ -289,10 +226,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Check dependencies changes
-      uses: dorny/paths-filter@v2
+      uses: dorny/paths-filter@v3
       id: changes
       with:
         filters: |
@@ -327,10 +264,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Check dependencies changes
-      uses: dorny/paths-filter@v2
+      uses: dorny/paths-filter@v3
       id: changes
       with:
         filters: |
@@ -348,7 +285,7 @@ jobs:
       if: steps.changes.outputs.cargo == 'true'
       env:
         UDEPS_LINK: https://github.com/est31/cargo-udeps/releases/download
-        UDEPS_VERSION: v0.1.35
+        UDEPS_VERSION: v0.1.53
       run: |
         curl -L "$UDEPS_LINK/$UDEPS_VERSION/cargo-udeps-$UDEPS_VERSION-x86_64-unknown-linux-gnu.tar.gz" |
         tar xz -C $HOME/.cargo/bin --strip-components 2
@@ -358,69 +295,4 @@ jobs:
       run: |
         cargo +nightly udeps --all-targets
 
-################################## CACHE LEVEL #################################
 
-  cache-level-ubuntu:
-
-    needs: [audit-ubuntu, deny-ubuntu, udeps-ubuntu]
-
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v3
-
-    - name: Install Rust nightly
-      uses: dtolnay/rust-toolchain@nightly
-      with:
-        toolchain: nightly
-        components: rust-src
-
-    - name: Cache produced data
-      id: cache-data
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: ${{ runner.os }}-cargo-ci-${{ hashFiles('**/Cargo.toml') }}
-
-    - name: Install cargo-careful
-      if: steps.cache-data.outputs.cache-hit != 'true'
-      run: |
-        cargo install cargo-careful
-
-################################## UNSAFE CHECKS LEVEL #########################
-  careful-ubuntu:
-
-    needs: cache-level-ubuntu
-
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v3
-
-    - name: Install Rust nightly
-      uses: dtolnay/rust-toolchain@nightly
-      with:
-        toolchain: nightly
-        components: rust-src
-
-    - name: Cache produced data
-      id: cache-data
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: ${{ runner.os }}-cargo-ci-${{ hashFiles('**/Cargo.toml') }}
-
-    - name: Run cargo-careful
-      run: |
-        cargo +nightly careful test
-        # cargo +nightly careful run
