@@ -12,7 +12,7 @@ use futures_core::Stream;
 use futures_util::StreamExt;
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use reqwest::Client;
-use tracing::debug;
+use tracing::{debug, trace};
 
 use wot_td::{
     extend::{Extend, ExtendablePiece, ExtendableThing},
@@ -164,7 +164,7 @@ impl<Other: ExtendableThing + ExtendablePiece> Discoverer<Other> {
         let s = receiver.into_stream().filter_map(move |v| {
             let client = http_client.clone();
             async move {
-                tracing::info!("{:?}", v);
+                trace!("{:?}", v);
                 if let ServiceEvent::ServiceResolved(info) = v {
                     let t = get_thing(&client, info).await;
                     Some(t)
