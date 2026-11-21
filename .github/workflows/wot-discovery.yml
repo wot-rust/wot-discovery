@@ -11,6 +11,7 @@ on:
       - '.github/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - 'deny.toml'
   pull_request:
     branches:
       - master
@@ -21,6 +22,7 @@ on:
       - '.github/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - 'deny.toml'
 
 jobs:
 
@@ -99,7 +101,7 @@ jobs:
         rust-code-analysis-cli --metrics -O json --pr -o "$HOME/rca-json" -p ${{ matrix.dir }}
 
     - name: Upload rust-code-analysis json
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: rca-json-${{ matrix.conf }}
         path: ~/rca-json
@@ -253,7 +255,7 @@ jobs:
       if: steps.changes.outputs.cargo == 'true'
       env:
         UDEPS_LINK: https://github.com/est31/cargo-udeps/releases/download
-        UDEPS_VERSION: v0.1.53
+        UDEPS_VERSION: v0.1.61
       run: |
         curl -L "$UDEPS_LINK/$UDEPS_VERSION/cargo-udeps-$UDEPS_VERSION-x86_64-unknown-linux-musl.tar.gz" |
         tar xz -C $HOME/.cargo/bin --strip-components 2
