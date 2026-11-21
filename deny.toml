@@ -8,4 +8,13 @@ multiple-versions = "allow"
 version = 2
 # We want really high confidence when inferring licenses from text
 confidence-threshold = 0.93
-allow = ["Apache-2.0", "MIT", "BSD-3-Clause", "Zlib", "Unicode-3.0"]
+allow = [
+    "Apache-2.0",
+    "MIT",
+    "MIT-0",
+    "ISC",
+    "BSD-3-Clause",
+    "CDLA-Permissive-2.0",
+    "Zlib",
+    "Unicode-3.0",
+]
