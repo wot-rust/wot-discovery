@@ -10,7 +10,7 @@ use std::{marker::PhantomData, net::IpAddr};
 
 use futures_core::Stream;
 use futures_util::StreamExt;
-use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
+use mdns_sd::{ResolvedService, ScopedIp, ServiceDaemon, ServiceEvent};
 use reqwest::Client;
 use tracing::{debug, trace};
 
@@ -51,7 +51,7 @@ pub struct Discovered<Other: ExtendableThing + ExtendablePiece> {
     ///
     /// It is provided as presented by the discovered Servient.
     pub thing: Thing<Other>,
-    info: ServiceInfo,
+    info: ResolvedService,
     scheme: String,
 }
 
@@ -61,7 +61,7 @@ impl<Other: ExtendableThing + ExtendablePiece> Discovered<Other> {
         self.info
             .get_addresses()
             .iter()
-            .map(|ip| ip.to_owned().into())
+            .map(ScopedIp::to_ip_addr)
             .collect()
     }
     /// Discovered Servient listening port
@@ -99,9 +99,14 @@ impl Discoverer {
 
 async fn get_thing<Other: ExtendableThing + ExtendablePiece>(
     client: &Client,
-    info: ServiceInfo,
+    info: ResolvedService,
 ) -> Result<Discovered<Other>> {
-    let host = info.get_addresses().iter().next().ok_or(Error::NoAddress)?;
+    let host = info
+        .get_addresses()
+        .iter()
+        .next()
+        .map(ScopedIp::to_ip_addr)
+        .ok_or(Error::NoAddress)?;
     let port = info.get_port();
     let props = info.get_properties();
     let path = props.get_property_val_str("td").unwrap_or(WELL_KNOWN);
@@ -166,7 +171,7 @@ impl<Other: ExtendableThing + ExtendablePiece> Discoverer<Other> {
             async move {
                 trace!("{:?}", v);
                 if let ServiceEvent::ServiceResolved(info) = v {
-                    let t = get_thing(&client, info).await;
+                    let t = get_thing(&client, *info).await;
                     Some(t)
                 } else {
                     None
